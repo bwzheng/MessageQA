@@ -1,0 +1,29 @@
+<ion-header>
+  <ion-navbar>
+    <ion-title>
+      Log In
+    </ion-title>
+  </ion-navbar>
+</ion-header>
+<ion-content class="loginpage">
+   <div class="list">
+     <ion-list>
+
+       <ion-item>
+         <ion-label floating>Email</ion-label>
+         <ion-input type="email" [(ngModel)]="email"></ion-input>
+       </ion-item>
+
+       <ion-item>
+         <ion-label floating>Password</ion-label>
+         <ion-input type="password" [(ngModel)]="password"></ion-input>
+       </ion-item>
+
+      </ion-list>
+      <label class="item item-input" style="padding: 0px;">
+      <button class="button button-block button-positive" (click)="validateUser()" style="width: 90%; margin-left: 5%;">
+      Log In
+      </button>
+      </label>
+   </div>
+</ion-content>

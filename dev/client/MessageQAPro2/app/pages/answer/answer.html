@@ -1,0 +1,36 @@
+<ion-header>
+  <ion-navbar>
+    <ion-title>
+      Answer this
+    </ion-title>
+  </ion-navbar>
+</ion-header>
+<ion-content>
+  <ion-list>
+    <ion-item>
+      <ion-avatar item-left>
+        <img src="{{question.professional.face}}">
+      </ion-avatar>
+      <h2>{{question.professional.name}}</h2>
+      <p>${{question.professional.price}}</p>
+    </ion-item>
+    <ion-item>
+      <p style="margin-left: 10px;">
+        {{question.item}}
+      </p>
+    </ion-item>
+    <ion-item>
+      <button class="item item-icon-left assertive" href="#" style="width: 50%; margin-left: 25%;" on-touch="record()" on-release="stop()"><i class="icon ion-android-microphone"></i>Hold to talk</button>
+    </ion-item>
+  </ion-list>
+
+
+  <h3 style="width: 50%; margin-left: 25%;">Preview</h3>
+  <h3 style="width: 50%; margin-left: 25%;">Answer</h3>
+  <button type="button" name="button" class="button button-assertive" ng-click="playback()" style="width: 50%; margin-left: 25%; margin-top: 10px;">Play</button>
+
+  <button class="button button-balanced" style="width: 50%; margin-left: 25%; margin-top: 10px;">
+    <i class="icon ion-checkmark"></i>
+    Answer
+  </button>
+</ion-content>

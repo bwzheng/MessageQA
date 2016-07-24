@@ -1,0 +1,13 @@
+<div class="bar bar-header bar-assertive">
+  <h1 class="title">Find & Ask</h1>
+  <button class="button button-clear" ng-click="logout()">Logout</button>
+</div>
+<ion-content class="has-header padding" has-tabs="true">
+  <ion-item class="item-remove-animate item-avatar item-icon-right" ng-repeat="professional in professionals" type="item-text-wrap" ng-click="gotoDetail('{{professional.id}}')">
+        <img ng-src="{{professional.face}}">
+        <h2>{{professional.name}}</h2>
+        <p>${{professional.price}}</p>
+        <p>{{professional.intro}}</p>
+        <i class="icon ion-chevron-right icon-accessory"></i>
+  </ion-item>
+</ion-content>

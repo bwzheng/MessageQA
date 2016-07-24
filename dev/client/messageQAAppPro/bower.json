@@ -1,0 +1,11 @@
+{
+  "name": "HelloIonic",
+  "private": "true",
+  "devDependencies": {
+    "ionic": "driftyco/ionic-bower#1.3.1"
+  },
+  "dependencies": {
+    "angular-hold-button": "^1.0.1",
+    "ng-material-floating-button": "ng-mfb#^0.6.2"
+  }
+}

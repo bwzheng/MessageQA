@@ -1,0 +1,32 @@
+<ion-header>
+  <ion-navbar>
+    <ion-title>
+      Questions for Me
+    </ion-title>
+  </ion-navbar>
+</ion-header>
+
+<ion-content padding class="myquestions">
+  <ion-refresher (ionRefresh)="getQuestions($event)">
+    <ion-refresher-content></ion-refresher-content>
+  </ion-refresher>
+  <ion-list>
+    <ion-item *ngFor="let question of questions">
+      <ion-avatar item-left>
+        <img src="{{question.professional.face}}">
+      </ion-avatar>
+      <h1>From {{question.token}}</h1>
+      <h2>{{question.item}}</h2>
+      <p>
+        Updated: <time>{{question.updated | amTimeAgo}}</time>
+      </p>
+      <p item-right><time>{{question.created | amTimeAgo}}</time></p>
+      <p item-right>
+        (Expired)
+      </p>
+      <a (click)="answer(question)">Answer This</a>
+      <a href="mailto:{{question.token}}"> Email the Questioner</a>
+      <ion-badge item-right style="margin-left: 10px;">${{question.professional.price}}</ion-badge>
+    </ion-item>
+  </ion-list>
+</ion-content>
