@@ -1,13 +1,11 @@
-angular.module('messageQAPro.controllers', ['messageQAPro.services'])
+angular.module('messageQA.controllers', ['messageQA.services'])
 
-.controller('TherapistsLoginCtrl', function ($rootScope, $scope, API, $window) {
-    // if the user is already logged in, take him to his bucketlist
-    if ($rootScope.isTherapistSessionActive()) {
-        $window.location.href = ('#/therapistsdefault/questions');
+.controller('LoginController', function ($rootScope, $scope, API, $window, $state) {
+    // if the user is already logged in
+    if ($rootScope.isSessionActive()) {
+        // Set a flag that we finished the tutorial
+        $window.location.href = ('#/tab/questions');
     }
-
-
-
     $scope.user = {
         email: "",
         password: ""
@@ -15,90 +13,300 @@ angular.module('messageQAPro.controllers', ['messageQAPro.services'])
 
     $scope.validateUser = function () {
         var email = this.user.email;
-        var password = this.user.password;
+        var password = this.user.password
         if(!email || !password) {
-        	$rootScope.notify("Please enter valid credentials");
-        	return false;
+        	$rootScope.notify("Please enter valid credentials")
+        	return false
         }
         $rootScope.show('Please wait.. Authenticating');
-        API.therapistsignin({
+        API.signin({
             email: email,
             password: password
         }).success(function (data) {
-            $rootScope.setTherapistToken(email); // create a session kind of thing on the client side
-            console.log("ID:", data.tid);
-            $rootScope.setTherapistID(data.tid);
+            $rootScope.setToken(email); // create a session kind of thing on the client side
             $rootScope.hide();
-            $window.location.href = ('#/therapistsdefault/questions');
-            $rootScope.$broadcast('fetchAllTherapists');
+            $window.location.href = ('#/tab/questions');
+            $rootScope.$broadcast('fetchAll');
+            $rootScope.$broadcast('fetchAllQs');
         }).error(function (error) {
             $rootScope.hide();
+            $rootScope.notify("Invalid Username or password");
         });
     }
 
 })
 
-.controller('TherapistsDefaultQuestionsCtrl', function ($rootScope, $scope, API, $timeout, $ionicModal, $window, $state) {
-    console.log($rootScope.isTherapistSessionActive());
-    if ($rootScope.isTherapistSessionActive() == false){
-      // $window.location.href = ('#/therapists/login');
-      // $state.go('therapists.login')
-      $state.go('therapists.login', {});
-    }
-    $scope.logout = function() {
-      console.log("Hi");
-      $rootScope.logout();
-    }
-    $rootScope.$on('fetchAllTherapists', function(){
-      if ($rootScope.getTherapistID()){
-        API.getTherapistAll($rootScope.getTherapistID()).success(function (data, status, headers, config) {
-
-            $rootScope.show("Please wait... Processing");
-            $scope.list = [];
-
-            for (var i = 0; i < data.length; i++) {
-                if (data[i].responseData) {
-                  data[i].hasAnswered = true;
-                } else {
-                  data[i].hasAnswered = false;
-                }
-                $scope.list.push(data[i]);
-            };
-            console.log($scope.list.length);
-            if($scope.list.length == 0)
-            {
-                $scope.noData = true;
-            }
-            else
-            {
-                $scope.noData = false;
-            }
-            $scope.list.sort(function(a,b){
-              // Turn your strings into dates, and then subtract them
-              // to get a value that is either negative, positive, or zero.
-              return b.created - a.created;
-            });
-            $ionicModal.fromTemplateUrl('templates/newItem.html', function (modal) {
-                $scope.newTemplate = modal;
-            });
-
-            $scope.newQuestion = function () {
-                $scope.newTemplate.show();
-            };
+.controller('FindController', function ($rootScope, $scope, $ionicModal, Professionals, Advocates) {
+    // if the user is already logged in, take him to his bucketlist
+    $scope.professionals = Professionals.all();
+    $scope.advocates = Advocates.all();
+    $scope.gotoDetailProfessional=function(professionalId){
+      $scope.professional = Professionals.get(professionalId);
+        $ionicModal.fromTemplateUrl('templates/professional-detail.html', function (modal) {
+          $rootScope.show("Loading");
+          $scope.newProfessionalTemplate = modal;
+          $scope.newProfessionalTemplate.show().then(function(){
             $rootScope.hide();
-        }).error(function (data, status, headers, config) {
-            $rootScope.hide();
-            $rootScope.notify("Oops something went wrong!! Please try again later");
+          });
+        },{
+          scope: $scope
         });
+
+
+    }
+    $scope.gotoDetailAdvocate = function(advocateId){
+      $scope.advocate = Advocates.get(advocateId);
+        $ionicModal.fromTemplateUrl('templates/advocate-detail.html', function (modal) {
+          $rootScope.show("Loading");
+          $scope.newProfessionalTemplate = modal;
+          $scope.newProfessionalTemplate.show().then(function(){
+            $rootScope.hide();
+          });
+        },{
+          scope: $scope
+        });
+    }
+})
+
+.controller('ProfessionalDetailController', function($rootScope, $scope, StripeCharge, $stateParams, API) {
+  $scope.questionData = {
+    item: ""
+  };
+  $scope.close = function (){
+    $scope.newProfessionalTemplate.hide();
+  }
+  $scope.payAndAsk = function (){
+    if (!$scope.questionData.item){
+      $rootScope.notify("Please enter a valid message");
+      return;
+    }
+    // first get the Stripe token
+    var form = {
+        item: this.questionData.item,
+        user: $rootScope.getToken(),
+        professional: $scope.professional,
+        toID: $scope.professional.id.toString(),
+        created: Date.now(),
+        updated: Date.now()
+    };
+    $scope.newProfessionalTemplate.hide();
+    StripeCharge.getStripeToken($scope.professional).then(
+      function(stripeToken){
+        // -->
+        proceedCharge(stripeToken);
+      },
+      function(error){
+        console.log(error)
+
+        if(error != "ERROR_CANCEL") {
+          $rootScope.notify("Oops something went wrong");
+        } else {
+          $scope.newProfessionalTemplate.show();
+        }
+      }
+    ); // ./ getStripeToken
+
+    function proceedCharge(stripeToken) {
+      // then charge the user through your custom node.js server (server-side)
+      StripeCharge.chargeUser(stripeToken, $scope.professional).then(
+        function(StripeInvoiceData){
+          if(StripeInvoiceData.hasOwnProperty('id')) {
+
+            API.saveItem(form, form.user)
+                .success(function (data, status, headers, config) {
+                    $rootScope.hide();
+                    $rootScope.doRefresh(1);
+                    $rootScope.notify("Question Added");
+                })
+                .error(function (data, status, headers, config) {
+                    $rootScope.hide();
+                    console.log(JSON.stringify(config, null, 4));
+                });
+
+          } else {
+          };
+        },
+        function(error){
+          $rootScope.notify("Charge Failed");
+
+        }
+      );
+
+    }; // ./ proceedCharge
+
+
+  }
+})
+
+.controller('AdvocateDetailController', function($rootScope, $scope, StripeCharge, $stateParams, API) {
+  $scope.questionData = {
+    item: ""
+  };
+  $scope.close = function (){
+    $scope.newProfessionalTemplate.hide();
+  }
+  $scope.payAndAsk = function (){
+    if (!$scope.questionData.item){
+      $rootScope.notify("Please enter a valid message");
+      return;
+    }
+    // first get the Stripe token
+    var form = {
+        item: this.questionData.item,
+        user: $rootScope.getToken(),
+        professional: $scope.advocate,
+        toID: $scope.advocate.id.toString(),
+        created: Date.now(),
+        updated: Date.now()
+    };
+    $scope.newProfessionalTemplate.hide();
+    if ($scope.advocate.price == 0) {
+      API.saveItem(form, form.user)
+          .success(function (data, status, headers, config) {
+              $rootScope.hide();
+              $rootScope.doRefresh(1);
+              $rootScope.notify("Question Added");
+          })
+          .error(function (data, status, headers, config) {
+              $rootScope.hide();
+              console.log(JSON.stringify(config, null, 4));
+          });
+    } else {
+      StripeCharge.getStripeToken($scope.advocate).then(
+        function(stripeToken){
+          // -->
+          proceedCharge(stripeToken);
+        },
+        function(error){
+          console.log(error)
+
+          if(error != "ERROR_CANCEL") {
+            $rootScope.notify("Oops something went wrong");
+          } else {
+            $scope.newProfessionalTemplate.show();
+          }
+        }
+      ); // ./ getStripeToken
+
+      function proceedCharge(stripeToken) {
+        // then charge the user through your custom node.js server (server-side)
+        StripeCharge.chargeUser(stripeToken, $scope.advocate).then(
+          function(StripeInvoiceData){
+            if(StripeInvoiceData.hasOwnProperty('id')) {
+
+              API.saveItem(form, form.user)
+                  .success(function (data, status, headers, config) {
+                      $rootScope.hide();
+                      $rootScope.doRefresh(1);
+                      $rootScope.notify("Question Added");
+                  })
+                  .error(function (data, status, headers, config) {
+                      $rootScope.hide();
+                      console.log(JSON.stringify(config, null, 4));
+                  });
+
+            } else {
+            };
+          },
+          function(error){
+            $rootScope.notify("Charge Failed");
+
+          }
+        );
+
+      }; // ./ proceedCharge
+    }
+
+
+
+  }
+})
+
+
+
+.controller('SignUpController', function ($rootScope, $scope, API, $window) {
+    $scope.user = {
+        email: "",
+        password: "",
+        name: ""
+    };
+    $scope.createUser = function () {
+    	var email = this.user.email;
+        var password = this.user.password;
+        var uName = this.user.name;
+        if(!email || !password || !uName) {
+        	$rootScope.notify("Please enter valid data");
+        	return false;
+        }
+        $rootScope.show('Please wait.. Registering');
+        API.signup({
+            email: email,
+            password: password,
+            name: uName
+        }).success(function (data) {
+            $rootScope.setToken(email); // create a session kind of thing on the client side
+            $rootScope.hide();
+            $window.location.href = ('#/tab/questions');
+        }).error(function (error) {
+            $rootScope.hide();
+        	if(error.error && error.error.code == 11000)
+        	{
+        		$rootScope.notify("A user with this email already exists");
+        	}
+        	else
+        	{
+        		$rootScope.notify("Oops something went wrong, Please try again!");
+        	}
+
+        });
+    }
+})
+
+.controller('MyQuestionsController', function ($rootScope, $scope, API, $timeout, $ionicModal, $window, Professionals) {
+    $rootScope.$on('fetchAll', function(){
+      if ($rootScope.getToken()){
+        API.getAll($rootScope.getToken()).success(function (data, status, headers, config) {
+        $rootScope.show("Please wait Processing");
+        $scope.list = [];
+        var professionals = Professionals.all();
+        for (var i = 0; i < data.length; i++) {
+          if (data[i].responseData) {
+            data[i].hasAnswered = true;
+          } else {
+            data[i].hasAnswered = false;
+        }
+          $scope.list.push(data[i]);
+          };
+          if($scope.list.length == 0)
+          {
+              $scope.noData = true;
+          }
+          else
+          {
+              $scope.noData = false;
+          }
+          $scope.list.sort(function(a,b){
+            // Turn your strings into dates, and then subtract them
+            // to get a value that is either negative, positive, or zero.
+            return b.created - a.created;
+          });
+
+          $scope.newQuestion = function () {
+              $scope.newTemplate.show();
+          };
+          $rootScope.hide();
+          }).error(function (data, status, headers, config) {
+              $rootScope.hide();
+              $rootScope.notify("Oops something went wrong!! Please try again later");
+          });
       }
 
     });
 
-    $rootScope.$broadcast('fetchAllTherapists');
-
+    $rootScope.$broadcast('fetchAll');
 
     $scope.remove = function (id) {
-        $rootScope.show("Please wait... Deleting from List");
+        $rootScope.show("Please wait Deleting from List");
         API.deleteItem(id, $rootScope.getToken())
             .success(function (data, status, headers, config) {
                 $rootScope.hide();
@@ -109,147 +317,223 @@ angular.module('messageQAPro.controllers', ['messageQAPro.services'])
             });
     };
     // $ionicModal.fromTemplateUrl('templates/question-detail.html', function(modal) {
-    //   $scope.modalCtrl = modal;
+    //   $scope.modalController = modal;
     // }, {
     //   scope: $scope,  /// GIVE THE MODAL ACCESS TO PARENT SCOPE
     //   animation: 'slide-in-left'//'slide-left-right', 'slide-in-up', 'slide-right-left'
     // });
 
     $scope.gotoDetail=function(questionId){
-      API.getOne(questionId, $rootScope.getTherapistToken())
+      $rootScope.show("Loading");
+      API.getOne(questionId, $rootScope.getToken())
       .success(function (data, status, headers, config) {
           $scope.question = data;
           $ionicModal.fromTemplateUrl('templates/question-detail.html', function (modal) {
             $scope.newDetailTemplate = modal;
-            console.log("Showing");
-            $scope.newDetailTemplate.show();
+            $scope.newDetailTemplate.show().then(function(){
+              $rootScope.hide();
+            })
           },{
             scope: $scope
           });
-      })
-    }
-    $scope.close = function(){
-      $scope.newDetailTemplate.hide()
+      });
+
+
+
     }
 })
 
-.controller('QuestionDetailCtrl', function($scope, $rootScope, $element, $stateParams, API) {
+.controller('PopularQuestionsController', function ($rootScope, $scope, API, $timeout, $ionicModal, $window, Professionals, pouchService) {
+    $rootScope.$on('fetchAllQs', function(){
+      if ($rootScope.getToken()){
+        API.findAll($rootScope.getToken()).success(function (data, status, headers, config) {
+        $rootScope.show("Please wait Processing");
+        $scope.list = [];
+        var professionals = Professionals.all();
+        for (var i = 0; i < data.length; i++) {
+          if (data[i].responseData) {
+            data[i].hasAnswered = true;
+          } else {
+            data[i].hasAnswered = false;
+          }
+          $scope.list.push(data[i]);
+          };
+          if($scope.list.length == 0)
+          {
+              $scope.noData = true;
+          }
+          else
+          {
+              $scope.noData = false;
+          }
+          $scope.list.sort(function(a,b){
+            // Turn your strings into dates, and then subtract them
+            // to get a value that is either negative, positive, or zero.
+            return b.created - a.created;
+          });
+          $rootScope.hide();
+          }).error(function (data, status, headers, config) {
+              $rootScope.hide();
+              $rootScope.notify("Oops something went wrong!! Please try again later");
+          });
+      }
+
+    });
+
+    $rootScope.$broadcast('fetchAllQs');
+
+    $scope.remove = function (id) {
+        $rootScope.show("Please wait Deleting from List");
+        API.deleteItem(id, $rootScope.getToken())
+            .success(function (data, status, headers, config) {
+                $rootScope.hide();
+                $rootScope.doRefresh(1);
+            }).error(function (data, status, headers, config) {
+                $rootScope.hide();
+                $rootScope.notify("Oops something went wrong!! Please try again later");
+            });
+    };
+    // $ionicModal.fromTemplateUrl('templates/question-detail.html', function(modal) {
+    //   $scope.modalController = modal;
+    // }, {
+    //   scope: $scope,  /// GIVE THE MODAL ACCESS TO PARENT SCOPE
+    //   animation: 'slide-in-left'//'slide-left-right', 'slide-in-up', 'slide-right-left'
+    // });
+    $scope.gotoDetail=function(questionId){
+      $rootScope.show("Loading");
+      pouchService.db.get(questionId, function(err, doc) {
+        if (err) {
+          API.getOne(questionId, $rootScope.getToken())
+          .success(function (data, status, headers, config) {
+              $scope.question = data;
+              pouchService.db.put(data[0], function callback(err, result) {
+                if (!err) {
+                  console.log('Successfully posted a todo!');
+                } else {
+                  console.log(JSON.stringify(err, null, 4));
+                }
+              });
+              $ionicModal.fromTemplateUrl('templates/question-detail.html', function (modal) {
+                $scope.newDetailTemplate = modal;
+                $scope.newDetailTemplate.show().then(function(){
+                  $rootScope.hide()
+                });
+              },{
+                scope: $scope
+              });
+          });
+        }
+        // handle doc
+        if (doc){
+          console.log(JSON.stringify(doc, null, 4));
+          $scope.question = [doc];
+          $ionicModal.fromTemplateUrl('templates/question-detail.html', function (modal) {
+            $scope.newDetailTemplate = modal;
+            $scope.newDetailTemplate.show().then(function(){
+              $rootScope.hide()
+            });
+          },{
+            scope: $scope
+          });
+        }
+      });
+
+
+
+
+
+    }
+})
+
+.controller('LicenseController', function ($rootScope, $scope, API, $window) {
+})
+
+.controller('QuestionDetailController', function($scope, $element, $stateParams, $rootScope, StripeCharge, $ionicModal, API) {
+  var soundPath;
   var audioElement = $element.find('audio')[0];
-  var currentUniqID, currentFilePath, currentMedia;
+
+  function createFile(dirEntry, fileName, data) {
+    // Creates a new file or returns the file if it already exists.
+    dirEntry.getFile(fileName, {create: true, exclusive: false}, function(fileEntry) {
+
+        writeFile(fileEntry, data);
+
+    }, function(err){
+
+    });
+
+  }
+  function writeFile(fileEntry, dataObj) {
+    // Create a FileWriter object for our FileEntry (log.txt).
+    fileEntry.createWriter(function (fileWriter) {
+
+        fileWriter.onwriteend = function() {
+            console.log("Successful file write");
+            console.log(JSON.stringify(fileEntry, null, 4));
+            soundPath = fileEntry.nativeURL;
+        };
+
+        fileWriter.onerror = function (e) {
+            console.log("Failed file write: " + e.toString());
+        };
+
+        // If data object is not passed in,
+        // create a new Blob instead.
+        if (!dataObj) {
+            dataObj = new Blob(['some file data'], { type: 'text/plain' });
+        }
+
+        fileWriter.write(dataObj);
+    });
+  }
+  $scope.close = function (){
+    $scope.newDetailTemplate.hide();
+  }
+  //check if the question is mine
+  if ($scope.question[0].user == $rootScope.getToken()){
+    $scope.isMyQuestion = true;
+  } else {
+    $scope.isMyQuestion = false;
+  }
   if ($scope.question[0].responseData){
     $scope.hasAnswered = true;
+    var superAudioBuffer = b64toBlob($scope.question[0].responseData);
+    window.requestFileSystem(window.TEMPORARY, 5 * 1024 * 1024, function (fs) {
+
+        console.log('file system open: ' + fs.name);
+        var uniq = 'id' + (new Date()).getTime();
+        createFile(fs.root, uniq + ".caf", superAudioBuffer);
+
+    }, function(err){
+
+    });
   } else {
     $scope.hasAnswered = false;
   }
-  // $scope.question[0].responseData = my_media;
-  // console.log(JSON.stringify($scope.question[0], null, 4));
-  // $rootScope.show("Saving");
-  // API.putItem($scope.question[0]._id, $scope.question[0], $rootScope.getTherapistToken())
-  // .success(function (data, status, headers, config) {
-  //     $rootScope.hide();
-  //     $rootScope.doRefresh(1);
-  // }).error(function (data, status, headers, config) {
-  //     console.log("Failed");
-  //     $rootScope.hide();
-  //     $rootScope.notify("Oops something went wrong!! Please try again later");
-  // });
-  $scope.record = function (){
-    console.log('helloworld');
-    var uniq = 'id' + (new Date()).getTime();
-    currentUniqID = uniq;
-    window.plugins.BZRecorder.record(function(data){
-      console.log(data);
-    }, null, uniq)
-  }
-  $scope.stop = function (){
-    window.plugins.BZRecorder.stop(function(data){
-      currentFilePath = data;
-      console.log(data);
-    }, null);
-    $scope.hasAnswered = true;
+  $scope.WhisperCount = $scope.question[0].whisperCount ? $scope.question[0].whisperCount : 0;
+  function decode_utf8(str)
+  {
+   return decodeURIComponent( escape(str) );
   }
 
-  $scope.playback = function (){
-    currentMedia = new Media(currentFilePath,
-        // success callback
-        function () { console.log("playAudio():Audio Success"); },
-        // error callback
-        function (err) { console.log("playAudio():Audio Error: " + err); }
-    );
-    currentMedia.play();
+  function decodeBase64(encoded)
+  {
+   var iPlus5;
+   var currEncoded;
+   var decoded;
+   var res = "";
+   for (i = 0; i < encoded.length; i += 4)
+   {
+    iPlus5 = i + 4;
+    currEncoded = encoded.substring(i, iPlus5);
+    currEncoded = currEncoded.replace(/\s/g, "");
+    decoded = window.atob( decode_utf8(currEncoded) );
+    res += decoded;
+   }
+   return res;
   }
-
-  $scope.stopPlayback = function (){
-    currentMedia.stop();
-  }
-
-//   var captureError = function(e) {
-//     console.log('captureError' ,e);
-// }
-//
-// var captureSuccess = function(e) {
-//     console.log('captureSuccess');console.dir(e);
-//     $scope.sound.file = e[0].localURL;
-//     $scope.sound.filePath = e[0].fullPath;
-// }
-//
-// $scope.record = function() {
-//     navigator.device.capture.captureAudio(
-//         captureSuccess,captureError,{duration:10});
-// }
-
-  $scope.save = function() {
-    if (currentFilePath){
-       var type = window.PERSISTENT;
-       var size = 5*1024*1024;
-
-       window.requestFileSystem(type, size, successCallback, errorCallback)
-
-       function successCallback(fs) {
-          fs.root.getFile(currentUniqID + ".caf", {create: false, exclusive: false}, function(fileEntry) {
-            // var reader = new FileReader();
-            // reader.onloadend = function(evt) {
-            //     console.log("Read as data URL");
-            //     console.log(evt.target.result);
-            // };
-            // reader.readAsDataURL(fileEntry);
-            fileEntry.file(function (file) {
-              var reader = new FileReader();
-
-              reader.onloadend = function() {
-                  console.log("Successful file read");
-                  $scope.question[0].responseData = this.result;
-                  console.log(JSON.stringify($scope.question[0], null, 4));
-                  API.putItem($scope.question[0]._id, $scope.question[0], $rootScope.getTherapistToken())
-                  .success(function (data, status, headers, config) {
-                      $rootScope.notify("Saved");
-                      $rootScope.doRefresh(1);
-                  }).error(function (data, status, headers, config) {
-                      console.log("Failed");
-                      $rootScope.hide();
-                      $rootScope.notify("Oops something went wrong!! Please try again later");
-                  });
-              };
-
-              reader.readAsDataURL(file);
-
-          }, errorCallback);
-            console.log(JSON.stringify(fileEntry, null, 4));
-          }, errorCallback);
-       }
-
-       function errorCallback(error) {
-          alert("ERROR: " + error.code)
-       }
-    } else {
-      $rootScope.notify("Please record before you save the answer.")
-    }
-
-  }
-
   function b64toBlob(dataURI) {
-
-    var byteString = atob(dataURI.split(',')[1]);
+    var byteString = decodeBase64(dataURI.split(',')[1]);
     var ab = new ArrayBuffer(byteString.length);
     var ia = new Uint8Array(ab);
 
@@ -257,29 +541,64 @@ angular.module('messageQAPro.controllers', ['messageQAPro.services'])
         ia[i] = byteString.charCodeAt(i);
     }
     return new Blob([ab], { type: '*/*' });
-}
-  // function b64toBlob(b64Data, contentType, sliceSize) {
-  //   contentType = contentType || '';
-  //   sliceSize = sliceSize || 512;
-  //
-  //   var byteCharacters = atob(b64Data);
-  //   var byteArrays = [];
-  //
-  //   for (var offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-  //     var slice = byteCharacters.slice(offset, offset + sliceSize);
-  //
-  //     var byteNumbers = new Array(slice.length);
-  //     for (var i = 0; i < slice.length; i++) {
-  //       byteNumbers[i] = slice.charCodeAt(i);
-  //     }
-  //
-  //     var byteArray = new Uint8Array(byteNumbers);
-  //
-  //     byteArrays.push(byteArray);
-  //   }
-  //
-  //   var blob = new Blob(byteArrays, {type: contentType});
-  //   return blob;
-  // }
+  }
+  $scope.play = function (){
+    console.log(soundPath);
+    var my_media = new Media(soundPath.replace("file://", ""));
+    my_media.play();
+  }
+  $scope.payAndWhisper = function () {
+    $scope.newDetailTemplate.hide();
+    var questionObject = $scope.question[0];
+    questionObject.name = "Eavesdrop";
+    questionObject.price = 3;
+    questionObject.intro = questionObject.item;
+    StripeCharge.getStripeToken(questionObject).then(
+      function(stripeToken){
+        // -->
+        proceedCharge(stripeToken);
+      },
+      function(error){
+        if(error != "ERROR_CANCEL") {
+          $rootScope.notify("Oops something went wrong");
+        } else {
+          $rootScope.notify("Canceled");
+          $scope.newDetailTemplate.show();
+        }
+      }
+    );
 
-})
+    function proceedCharge(stripeToken) {
+      // then charge the user through your custom node.js server (server-side)
+      StripeCharge.chargeUser(stripeToken, questionObject).then(
+        function(StripeInvoiceData){
+          if(StripeInvoiceData.hasOwnProperty('id')) {
+            $rootScope.notify("Playing The Answer")
+            if (soundPath){
+              var my_media = new Media(soundPath.replace("file://", ""));
+              my_media.play();
+              if ($scope.question[0].whisperCount) {
+                $scope.question[0].whisperCount += 1;
+              } else {
+                $scope.question[0].whisperCount = 1;
+              }
+              API.putItem($scope.question[0]._id, $scope.question[0], $rootScope.getToken())
+                .success(function (data, status, headers, config) {
+                  console.log("WhisperCount Saved");
+                }).error(function (data, status, headers, config) {
+                  console.log("WhisperCount Failed");
+                });
+            }
+          } else {
+            $rootScope.notify("Error, please try again");
+          }
+        },
+        function(error){
+          $rootScope.notify("Charge Failed");
+
+        }
+      )
+
+    }; // ./ proceedCharge
+  }
+});

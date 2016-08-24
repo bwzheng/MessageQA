@@ -5,9 +5,20 @@
 // the 2nd parameter is an array of 'requires'
 // 'starter.services' is found in services.js
 // 'starter.controllers' is found in controllers.js
+// Noodlio Pay
 
+// These are fixed values, do not change this
+var NOODLIO_PAY_API_URL         = "https://noodlio-pay.p.mashape.com";
+var NOODLIO_PAY_API_KEY         = "7AGaQ6bSEBmshcxhK2TZ6LZjpfGQp1HBnE9jsniWnxvyS1V6RY";
+var NOODLIO_PAY_CHECKOUT_KEY    = {test: "pk_test_QGTo45DJY5kKmsX21RB3Lwvn", live: "pk_live_ZjOCjtf1KBlSHSyjKDDmOGGE"};
+// Obtain your unique Stripe Account Id from here:
+// https://www.noodl.io/pay/connect
+var STRIPE_ACCOUNT_ID           = "acct_18YHIhGRav2dwZ3J";
 
-angular.module('messageQAPro', ['ionic', 'messageQAPro.controllers', 'messageQAPro.services', 'angularMoment'])
+// Define whether you are in development mode (TEST_MODE: true) or production mode (TEST_MODE: false)
+var TEST_MODE = false;
+
+angular.module('messageQA', ['ionic', 'messageQA.controllers', 'messageQA.services', 'angularMoment', 'stripe.checkout'])
 
 .run(function($ionicPlatform) {
   $ionicPlatform.ready(function() {
@@ -25,108 +36,114 @@ angular.module('messageQAPro', ['ionic', 'messageQAPro.controllers', 'messageQAP
   });
 })
 
-.config(function($stateProvider, $urlRouterProvider) {
+.config(function($stateProvider, $urlRouterProvider, StripeCheckoutProvider) {
+  switch (TEST_MODE) {
+    case true:
+      //
+      StripeCheckoutProvider.defaults({key: NOODLIO_PAY_CHECKOUT_KEY['test']});
+      break
+    default:
+      //
+      StripeCheckoutProvider.defaults({key: NOODLIO_PAY_CHECKOUT_KEY['live']});
+      break
+  };
+
   // Ionic uses AngularUI Router which uses the concept of states
   // Learn more here: https://github.com/angular-ui/ui-router
   // Set up the various states which the app can be in.
   // Each state's controller can be found in controllers.js
   $stateProvider
-  .state('therapists', {
-    url: '/therapists',
+  .state('auth', {
+    url: "/auth",
     abstract: true,
-    templateUrl: 'templates/therapists.html'
+    templateUrl: "templates/auth.html"
   })
-  .state('therapistsdefault', {
-    url: '/therapistsdefault',
+  .state('tab', {
+    url: '/tab',
     abstract: true,
-    templateUrl: 'templates/therapistsdefault.html'
+    templateUrl: 'templates/tabs.html'
   })
-  .state('therapists.login', {
-  url: '/login',
-  views: {
-    'therapists-login': {
-      templateUrl: 'templates/therapists-login.html',
-      controller: 'TherapistsLoginCtrl'
+  .state('auth.login', {
+    url: '/login',
+    views: {
+      'auth-login': {
+        templateUrl: 'templates/auth-login.html',
+        controller: 'LoginController'
+      }
     }
-  }
-})
-.state('therapistsdefault.questions', {
-url: '/questions',
-views: {
-  'therapistsdefault-questions': {
-    templateUrl: 'templates/therapistsdefault-questions.html',
-    controller: 'TherapistsDefaultQuestionsCtrl'
-  }
-}
-});
+  })
+  .state('auth.signup', {
+    url: '/signup',
+    views: {
+      'auth-signup': {
+        templateUrl: 'templates/auth-signup.html',
+        controller: 'SignUpController'
+      }
+    }
+  })
+  .state('tab.myquestions', {
+      url: '/myquestions',
+      views: {
+        'tab-myquestions': {
+          templateUrl: 'templates/tab-myquestions.html',
+          controller: 'MyQuestionsController'
+        }
+      }
+    })
+    .state('tab.questions', {
+        cache : true,
+        url: '/questions',
+        views: {
+          'tab-questions': {
+            templateUrl: 'templates/tab-questions.html',
+            controller: 'PopularQuestionsController'
+          }
+        }
+      })
+    // .state('tab.question-detail', {
+    //   url: '/questions/:questionId',
+    //   views: {
+    //     'tab-questions': {
+    //       templateUrl: 'templates/question-detail.html',
+    //       controller: 'QuestionDetailController'
+    //     }
+    //   }
+    // })
+    .state('tab.find', {
+        cache : true,
+        url: '/find',
+        views: {
+          'tab-find': {
+            templateUrl: 'templates/tab-find.html',
+            controller: 'FindController',
+            resolve: {
+              // checkout.js isn't fetched until this is resolved.
+              stripe: StripeCheckoutProvider.load
+            }
+          }
+        }
+      })
+    .state('tab.account', {
+    url: '/account',
+    views: {
+      'tab-account': {
+        templateUrl: 'templates/tab-account.html',
+        controller: 'AccountController'
+      }
+    }
+  })
+  .state('tab.license', {
+      url: '/license',
+      views: {
+        'tab-license': {
+          templateUrl: 'templates/tab-license.html',
+          controller: 'LicenseController'
+        }
+      }
+    });
 
 
   // if none of the above states are matched, use this as the fallback
-  $urlRouterProvider.otherwise('/therapists/login');
+  $urlRouterProvider.otherwise('/auth/login');
 
-})
-.directive('recordDirective', RecordDirective);
-
-RecordDirective.$inject = [];
-
-function RecordDirective() {
-    var ddo = {
-        scope: {},
-        restrict: 'E',
-        template: [
-            '<button class="item item-icon-left assertive" href="#" style="width: 50%; margin-left: 25%;" on-touch="record()" on-release="stop()"><i class="icon ion-android-microphone"></i>Hold to talk</button>',
-            '<h3 style="width: 50%; margin-left: 25%;">Preview</h3>',
-            '<div style="width: 50%; margin-left: 25%;"><audio controls></audio></div>',
-            ''
-        ].join(''),
-        link: function(scope, element, attributes) {
-            var mediaRecorder;
-            var mediaStream;
-            var recordedBlobs = [];
-            var audioElement = element.find('audio')[0];
-            scope.record = function() {
-                recordedBlobs = [];
-                console.log('Record clicked');
-                if (navigator.webkitGetUserMedia) {
-                   navigator.webkitGetUserMedia (
-                      {
-                         audio: true,
-                         video: false
-                      },
-                      function(stream) {
-                          console.log('got Stream');
-                          mediaStream = stream;
-                          mediaRecorder = new MediaRecorder(stream, {
-                              mimeType: 'audio/webm'
-                          });
-                          mediaRecorder.ondataavailable = function (event) {
-                              console.log('data available');
-                              recordedBlobs.push(event.data);
-                          };
-                          mediaRecorder.start(10);
-                      },
-                      function(err) {
-                         console.log('The following gUM error occured: ' + err);
-                      }
-                   );
-                } else {
-                   console.log('getUserMedia not supported on your browser!');
-                }
-            };
-            scope.stop = function() {
-                console.log('Stop button clicked');
-                mediaRecorder.stop();
-                mediaStream.getTracks().forEach(function(track) {
-                    console.log('stopping stream track');
-                    track.stop();
-                });
-                var superAudioBuffer = new Blob(recordedBlobs, {
-                    type: 'audio/webm'
-                });
-               var audioUrl = URL.createObjectURL(superAudioBuffer);
-               audioElement.src = audioUrl;
-            };
-        }
-    };
-    return ddo;
-}
+});
